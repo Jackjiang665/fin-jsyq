@@ -1,0 +1,27 @@
+import { auth } from "@/lib/auth"
+import { prisma } from "@/lib/prisma"
+import { NextResponse } from "next/server"
+
+export async function GET() {
+  try {
+    const session = await auth()
+
+    if (!session?.user || (session.user.role !== "admin" && session.user.role !== "finance")) {
+      return NextResponse.json({ error: "无权限" }, { status: 403 })
+    }
+
+    const expenses = await prisma.expense.findMany({
+      where: { status: "pending" },
+      orderBy: { createdAt: "desc" },
+      include: {
+        project: true,
+        submitter: true,
+      },
+    })
+
+    return NextResponse.json(expenses)
+  } catch (error) {
+    console.error("Fetch pending expenses error:", error)
+    return NextResponse.json({ error: "获取待审批报销失败" }, { status: 500 })
+  }
+}

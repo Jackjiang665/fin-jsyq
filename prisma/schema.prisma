@@ -1,0 +1,125 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 用户表
+model User {
+  id        String   @id @default(cuid())
+  name      String   // 真实姓名（财务可见）
+  nickname  String?  // 显示名称（员工可改）
+  email     String   @unique
+  password  String
+  role      String   // admin, finance, director, employee
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 关联
+  expenses         Expense[]     @relation("SubmittedBy")
+  approvedExpenses Expense[]     @relation("ApprovedBy")
+  salaries         Salary[]
+  transactions     Transaction[] @relation("CreatedBy")
+}
+
+// 项目表
+model Project {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  status      String   @default("active") // active, closed（进行中/已封账）
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 关联
+  expenses                Expense[]
+  transactions            Transaction[]
+  externalReimbursements  ExternalReimbursement[]
+}
+
+// 报销表
+model Expense {
+  id           String   @id @default(cuid())
+  amount       Float
+  description  String
+  fundSource   String   @default("personal") // personal, company（个人垫付/公司采购）
+  account      String   @default("public") // public, alipay（公户/支付宝）
+  hasInvoice   Boolean  @default(true) // 是否有发票
+  invoiceType  String?  // company, other（公司发票/其他单位发票）
+  invoiceNote  String?  // 发票备注（如：学校名称）
+  invoiceImage String?  // 发票图片路径
+  receiptImage String?  // 购物截图路径
+  paymentImage String?  // 支付明细路径
+  status       String   @default("pending") // pending, approved, rejected, paid
+  rejectReason String?
+  isHighAmount Boolean  @default(false) // 是否高额报销
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // 关联
+  submitter   User    @relation("SubmittedBy", fields: [submitterId], references: [id])
+  submitterId String
+  approver    User?   @relation("ApprovedBy", fields: [approverId], references: [id])
+  approverId  String?
+  project     Project @relation(fields: [projectId], references: [id])
+  projectId   String
+}
+
+// 工资表
+model Salary {
+  id         String   @id @default(cuid())
+  year       Int
+  month      Int
+  baseSalary Float
+  allowance  Float    @default(0)
+  deduction  Float    @default(0)
+  total      Float
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  // 关联
+  user   User   @relation(fields: [userId], references: [id])
+  userId String
+
+  @@unique([userId, year, month])
+}
+
+// 账目表（内账/外账）
+model Transaction {
+  id          String   @id @default(cuid())
+  type        String   // income, expense
+  category    String   // salary, purchase, reimbursement, subsidy, other
+  amount      Float
+  description String
+  accountType String   // internal, external（内账/外账）
+  account     String   @default("public") // public, alipay（公户/支付宝）
+  hasInvoice  Boolean  @default(true) // 是否有发票
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 关联
+  creator   User     @relation("CreatedBy", fields: [creatorId], references: [id])
+  creatorId String
+  project   Project? @relation(fields: [projectId], references: [id])
+  projectId String?
+}
+
+// 外部回款表（学校/其他单位补贴）
+model ExternalReimbursement {
+  id          String   @id @default(cuid())
+  source      String   // 学校/XX公司等
+  amount      Float
+  status      String   @default("pending") // pending, received（待回款/已回款）
+  description String?
+  receivedAt  DateTime? // 实际回款时间
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 关联
+  project   Project @relation(fields: [projectId], references: [id])
+  projectId String
+}
